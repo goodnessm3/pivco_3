@@ -77,6 +77,13 @@ VOLTAGE_ARRAYS = VoltageArrays()  # store and retrieve coarse, fine values per n
 DAC_MESSAGES = DacMessages()  # manages values to be written to the DACs
 RUNNING = False
 
+
+######### Temporary things for data logging ###########
+TIMES = array("I", [0] * 6096)
+EXPECTEDS = array("I", [0] * 6096)
+FREQS = array("i", [0] * 6096)
+######### Temporary things for data logging ###########
+
 def fast_loop():
 
     global TARGET_WAVECOUNTS  # so we know what we are aiming for
@@ -108,6 +115,11 @@ def fast_loop():
 
     print("fast loop function starting")
 
+    ######### Temporary things for data logging ###########
+    global data_idx
+    data_idx = 0
+    ######### Temporary things for data logging ###########
+
     while RUNNING:
 
         # calculate how long it has been since we were last here. Don't want to send DAC corrections too fast.
@@ -136,6 +148,7 @@ def fast_loop():
             pid.reset()
             flush_pio()
             ema_reset(target_note)
+            error_ema = 999
 
         sample = None
         while not sample:
@@ -189,7 +202,12 @@ def fast_loop():
             todo >>= 1
             chan += 1
 
-    print("Fast loop exited.")
+        ######### Temporary things for data logging ###########
+        TIMES[data_idx] = tnow
+        EXPECTEDS[data_idx] = target_note
+        FREQS[data_idx] = sample
+        data_idx += 1
+        ######### Temporary things for data logging ###########
 
 
 def shut_down():
@@ -209,6 +227,17 @@ def shut_down():
     print("VCA muted")
     time.sleep(1)  # make sure other core has time to exit
     print("Shutdown function finished")
+
+    with open("result.txt", "w") as f:
+        cnt = 0
+        for x, y, z in zip(TIMES, FREQS, EXPECTEDS):
+            f.write(f"{str(x)}\t{str(y)}\t{str(z)}")
+            f.write("\n")
+            cnt += 1
+            if cnt == 4096:
+                break
+    print("wrote data")
+
     exit()
 
 
@@ -216,19 +245,25 @@ def shut_down():
 
 import random
 
+global data_idx
+data_idx = 0
 RUNNING = True
+TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[46]
 _thread.start_new_thread(fast_loop, ())
 
 send_dac_value(2, 127)
 
+time.sleep(1)  # give time for PIO to start working!?
+
 try:
-    note = 37
-    while 1:
-        time.sleep(0.2)
+    note = 47
+    while data_idx < 4096:  # wait for fast loop to fill up measurement arrays
+        print(data_idx)
+        time.sleep(0.5)
         TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[note]
         note += 1
         if note > 95:
-            note = 37
+            note = 47
 
 except Exception as e:
     print(repr(e))
@@ -239,6 +274,7 @@ finally:
     #print(f"Averaged {lps} loops per second over {total_time} ms.")
     print("finally block")
     shut_down()
+
 
 
 
