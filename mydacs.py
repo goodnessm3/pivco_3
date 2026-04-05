@@ -216,8 +216,9 @@ class DacMessages:
         by the fast loop to determine what to send out to the DAC chip."""
 
         addr = dac * 8 + channel
-        self.dirty |= 1 << addr
-        self.messages[addr] = val
+        if not self.messages[addr] == val:
+            self.dirty |= 1 << addr  # only set dirty flag if the value actually changed
+            self.messages[addr] = val
 
     def get(self, dac, channel):
 
