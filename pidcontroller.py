@@ -67,9 +67,9 @@ class PidController:
 
         # print("delta: ", delta)
 
-        pterm = min((delta * delta * self.p >> 14), 1024)  # 03/31 - SQUARED proportional term
-        if delta < 0:
-            pterm = -pterm
+        pterm = min((delta * self.p >> 14), 1024)
+        #if delta < 0:
+            #pterm = -pterm
         iterm = (self.accumulated_error * self.i >> 26)
 
         pi = pterm + iterm

@@ -94,7 +94,8 @@ def fast_loop():
     global RUNNING  # flag used to stop this thread from the main thread
 
     # initial variable setup before entering loop
-    pid = PidController(512, 200, 400)  # used for all voices
+    pid = PidController(6144, 32, 0)  # used for all voices
+    # 500 200 100 with squared pid
     tnow = time.ticks_us()
     last_pid_time = time.ticks_us()
     convergence_possible = 0  # a counter for how many samples we got within the error tolerance. Past the threshold,
@@ -255,15 +256,22 @@ send_dac_value(2, 127)
 
 time.sleep(1)  # give time for PIO to start working!?
 
+lc = 0
+
+
 try:
     note = 47
     while data_idx < 4096:  # wait for fast loop to fill up measurement arrays
-        print(data_idx)
-        time.sleep(0.5)
-        TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[note]
-        note += 1
-        if note > 95:
-            note = 47
+        lc += 1
+
+        #print(data_idx)
+        if lc % 50 == 0:
+            TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[note]
+            note += 1
+            if note > 95:
+                note = 47
+
+        time.sleep(0.01)
 
 except Exception as e:
     print(repr(e))
