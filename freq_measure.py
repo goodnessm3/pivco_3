@@ -180,6 +180,8 @@ def get_sample_mean(samples=8):
     #print(samples)
     #print("tolerance", tolerance)
 
+    # todo: make better with power of 2 samples and bit shift instead of division
+
     return sum(MEANS_FILTERED) // good_samples
 
 
@@ -210,3 +212,62 @@ def flush_pio():
     while sm_clocker.rx_fifo() > 0:
         sm_clocker.get()
 
+
+
+def get_sample_mean_float(samples=8):
+
+    global MEANS
+    global MEANS_FILTERED
+
+    for x in range(samples):
+        MEANS_FILTERED[x] = 0  #re-zero array for next time
+
+    if samples > 32:
+        samples = 32  # max size of the buffer where we store these
+    idx = 0
+    smp = None
+
+    while 1:
+        while not smp:
+            smp = sm_clocker.get()
+        x = MAXX - (smp >> 16)
+        y = MAXX - (smp & 0xFFFF)  # splitting 32-bit number into 2 16-bit numbers
+        measurement = x + y  # this func just measures the wave cycle time, we are not interested in hi and lo parts
+        MEANS[idx] = measurement
+        idx += 1
+        if idx == samples:
+            break
+        smp = None
+
+    # now we have gathered the requested number of measurements, calculate mean and discard anomalies
+    # take the median
+    m = 0
+    idx = 1  # don't use zero and wrap the array, because sometimes the end of the array will be unfilled
+    while idx < samples:
+        d = MEANS[idx] - MEANS[idx-1]
+        m += d
+        idx += 1
+
+    # now go thru the array again and throw out anomalies
+    good_samples = 0
+    idx = 1
+    while idx < samples:
+        d = MEANS[idx] - MEANS[idx-1]
+
+        if d > ERROR_TOLERANCE:
+            #print("threw out", MEANS[idx], MEANS[idx-1])
+            idx += 2
+            continue  # delta is too large, don't include this pair of measurements
+        else:
+            MEANS_FILTERED[good_samples] = MEANS[idx-1]
+            MEANS_FILTERED[good_samples+1] = MEANS[idx]
+            good_samples += 2
+            idx += 2
+
+    #print(MEANS)
+    #print(MEANS_FILTERED)
+    #print("m", m)
+    #print(samples)
+    #print("tolerance", tolerance)
+
+    return sum(MEANS_FILTERED) / float(good_samples)

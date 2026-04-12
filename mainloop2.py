@@ -11,14 +11,15 @@ from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latc
 #from wavecount_table import NOTE_WAVECOUNTS  # use this to give the tuning PIDs a target
 # this table actually contains the log2s of the wave counts
 
-from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio
-from wavecount_table import NOTE_WAVECOUNTS, VoltageArrays
+from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
+from wavecount_table import NOTE_WAVECOUNTS, NOTES, VoltageArrays
 
 from line_fitter_fixedpoint import FitterFP
 from pidcontroller import PidController
-#FITTER = FitterFP(4)  # todo - this should belong to a voice
 
-"""
+from tuningarrays import TuningArrays
+
+
 
 # DAC setup code
 
@@ -26,7 +27,7 @@ for x in range(VOICE_COUNT):
     ADDRESS_MANAGER.put(x)
     time.sleep(0.1)
     dac_setup()  # manages reset pin
-"""
+
 
 ################### TESTING SETUP CODE #######################
 
@@ -47,45 +48,13 @@ dac_setup()  # manages reset pin
 ################### END OF SETUP FUNCTIONS #######################
 
 
-def initial_tune():
 
-    """Establishes the linear fit of CV to log2(f). Need one of these fitter objects per oscillator."""
-    # TODO: make part of voice class
-
-    fitter = FitterFP(4)
-
-    send_dac_value(5, 0)  # fine voltage = 0 for calibration
-
-    for q in range(12,255,64):  # 4 steps across the whole voltage range
-        send_dac_value(4, q)
-        time.sleep(0.01)
-        flush_pio()
-        ema_reset()
-        r = None
-        while not r:
-            r = get_sample_mean()
-        fitter.add(q, fast_log2(r))
-
-
-    fitter.fit_line()
-    return fitter
-
-FITTERS = []
-
-for v in (0, 1):
-    ADDRESS_MANAGER.put(v)
-    prepare_tune_latch()
-    time.sleep(0.01)
-    dac_setup()  # manages reset pin
-    #FITTERS.append(initial_tune())
-    print(f"fitted initial line for voice {v}")
 
 
 
 TARGET_WAVECOUNTS = array("I", [0] * 4)  # for communication between cores. Voice # and what log2(f) it aims at
 # array positions 4 and 5 unused (VCO coarse and fine - these are managed by the PID)
 VOICE_DIRTY = 0  # as above for whether a voice changed note. Used to determine what we should retune.
-VOLTAGE_ARRAYS = VoltageArrays()  # store and retrieve coarse, fine values per note per voice
 DAC_MESSAGES = DacMessages()  # manages values to be written to the DACs
 RUNNING = False
 NOTE_QUEUE = CustomFIFO(size=8)  # new notes we want to play. upper 4 bits: voice address, lower 8: MIDI note number
@@ -94,6 +63,8 @@ NOTE_QUEUE = CustomFIFO(size=8)  # new notes we want to play. upper 4 bits: voic
 TIMES = array("I", [0] * 6096)
 EXPECTEDS = array("I", [0] * 6096)
 FREQS = array("i", [0] * 6096)
+
+
 ######### Temporary things for data logging ###########
 
 def fast_loop():
@@ -278,7 +249,7 @@ def fast_loop():
             TIMES[data_idx] = tnow
             EXPECTEDS[data_idx] = target_note
             FREQS[data_idx] = sample
-            data_idx += 1
+            #data_idx += 1
         ######### Temporary things for data logging ###########
 
 
@@ -303,6 +274,8 @@ def shut_down():
     time.sleep(1)  # make sure other core has time to exit
     print("Shutdown function finished")
 
+    """
+
     with open("result.txt", "w") as f:
         cnt = 0
         for x, y, z in zip(TIMES, FREQS, EXPECTEDS):
@@ -312,6 +285,8 @@ def shut_down():
             if cnt == 4096:
                 break
     print("wrote data")
+    
+    """
 
     exit()
 
@@ -322,8 +297,8 @@ import random
 
 global data_idx
 data_idx = 0
-RUNNING = True
-TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[46]
+#RUNNING = True
+#TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[46]
 #_thread.start_new_thread(fast_loop, ())
 
 #
@@ -340,18 +315,110 @@ ADDRESS_MANAGER.put(0)
 prepare_tune_latch()
 #send_dac_value(2, 127)
 
-vals = (10, 70, 110, 150, 200)
-for x in range(100):
-    for y in vals:
-        send_dac_value(4, y)
+sampled_notes = []
+expected_notes = {}
 
-        time.sleep(40)
-        flush_pio()
-        ema_reset()
-        r = None
-        while not r:
-            r = get_sample_mean(32)
-        print(y, r)
+
+def shuffle(lst):
+    """
+    Shuffle a list in place using the Fisher-Yates algorithm.
+    Works on MicroPython (which doesn't have random.shuffle).
+
+    Args:
+        lst: The list to shuffle (modified in place)
+    """
+    # Start from the last element and go backwards
+    for i in range(len(lst) - 1, 0, -1):
+        # Pick a random index from 0 to i (inclusive)
+        j = random.randint(0, i)
+
+        # Swap elements at positions i and j
+        lst[i], lst[j] = lst[j], lst[i]
+
+    # No need to return anything since the list is modified in place
+
+
+
+# WARMUP LOOP:
+
+warmup_seconds = 1
+
+print("warming up")
+for x in range(warmup_seconds):
+    time.sleep(1)
+    a = random.randint(1, 254)
+    b = random.randint(1, 254)
+    send_dac_value(4, a)
+    send_dac_value(5, b)
+
+print("warmup done")
+
+TUNING_ARRAYS = TuningArrays(VOICE_COUNT)
+TUNING_ARRAYS.setup_arrays()
+#print(TUNING_ARRAYS.arr)
+"""
+for x in range(8):
+
+    midinote = random.randint(38, 92)
+    voltages = TUNING_ARRAYS.get(0, midinote)
+    sampled_notes.append(voltages)  # we will continually sample these to check for freq drift
+    expected_notes[midinote] = (NOTE_WAVECOUNTS[midinote])
+"""
+
+send_dac_value(2, 127)
+
+for x in range(36, 94):
+    #midinote = random.randint(38, 92)
+    midinote = x
+    #print(f"Optimizing note {midinote}")
+    voltages = TUNING_ARRAYS.get(0, midinote)
+    coarse = voltages >> 8  # signals to send to the DAC
+    fine = voltages & 255
+    #print(f"Predicted coarse, fine are {coarse} {fine}")
+    TUNING_ARRAYS.optimize(0, midinote)
+
+    #print(f"After PID, coarse, fine are {c2}, {f2}")
+    #print(f"{coarse}\t{fine}\t{c2}\t{f2}")
+
+# notes are tuned now.
+
+send_dac_value(2, 0)
+
+#shut_down()
+
+#for x in range(8):
+
+    #sampled_notes.append(random.randint(36, 90))  # we will continually sample these to check for freq drift
+
+
+sampled_notes = [37, 47, 57, 67, 77, 87, 41, 61, 71]
+print("sampled notes")
+print(sampled_notes)
+
+with open("result2.txt", "w") as f:
+    for x in range(80):
+        shuffle(sampled_notes)
+        print(f"cycle {x}")
+        for midinote in sampled_notes:
+            h = TUNING_ARRAYS.get(0, midinote)
+            a = h >> 8
+            b = h & 255
+            send_dac_value(4, a)
+            send_dac_value(5, b)
+            flush_pio()
+            ema_reset()
+            time.sleep(1)
+            expected = NOTE_WAVECOUNTS[midinote]
+            flush_pio()
+            for q in range(3):
+                tnow = int(time.ticks_ms() / 1000.0)
+                flush_pio()
+                samp = get_sample_mean(32)
+                f.write(f"{tnow}\t{expected}\t{fast_log2(samp)}\n")
+                f.flush()
+                time.sleep(1)
+
+
 
 send_dac_value(2, 0)
 shut_down()

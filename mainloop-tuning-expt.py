@@ -11,7 +11,7 @@ from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latc
 #from wavecount_table import NOTE_WAVECOUNTS  # use this to give the tuning PIDs a target
 # this table actually contains the log2s of the wave counts
 
-from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio
+from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
 from wavecount_table import NOTE_WAVECOUNTS, VoltageArrays
 
 from line_fitter_fixedpoint import FitterFP
@@ -72,12 +72,12 @@ def initial_tune():
 
 FITTERS = []
 
-for v in (0, 1):
+for v in (0,):
     ADDRESS_MANAGER.put(v)
     prepare_tune_latch()
     time.sleep(0.01)
     dac_setup()  # manages reset pin
-    #FITTERS.append(initial_tune())
+    FITTERS.append(initial_tune())
     print(f"fitted initial line for voice {v}")
 
 
@@ -94,6 +94,8 @@ NOTE_QUEUE = CustomFIFO(size=8)  # new notes we want to play. upper 4 bits: voic
 TIMES = array("I", [0] * 6096)
 EXPECTEDS = array("I", [0] * 6096)
 FREQS = array("i", [0] * 6096)
+
+
 ######### Temporary things for data logging ###########
 
 def fast_loop():
@@ -278,7 +280,7 @@ def fast_loop():
             TIMES[data_idx] = tnow
             EXPECTEDS[data_idx] = target_note
             FREQS[data_idx] = sample
-            data_idx += 1
+            #data_idx += 1
         ######### Temporary things for data logging ###########
 
 
@@ -303,6 +305,8 @@ def shut_down():
     time.sleep(1)  # make sure other core has time to exit
     print("Shutdown function finished")
 
+    """
+
     with open("result.txt", "w") as f:
         cnt = 0
         for x, y, z in zip(TIMES, FREQS, EXPECTEDS):
@@ -312,6 +316,8 @@ def shut_down():
             if cnt == 4096:
                 break
     print("wrote data")
+    
+    """
 
     exit()
 
@@ -322,8 +328,8 @@ import random
 
 global data_idx
 data_idx = 0
-RUNNING = True
-TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[46]
+#RUNNING = True
+#TARGET_WAVECOUNTS[0] = NOTE_WAVECOUNTS[46]
 #_thread.start_new_thread(fast_loop, ())
 
 #
@@ -340,18 +346,68 @@ ADDRESS_MANAGER.put(0)
 prepare_tune_latch()
 #send_dac_value(2, 127)
 
-vals = (10, 70, 110, 150, 200)
-for x in range(100):
-    for y in vals:
-        send_dac_value(4, y)
+sampled_notes = []
 
-        time.sleep(40)
-        flush_pio()
-        ema_reset()
-        r = None
-        while not r:
-            r = get_sample_mean(32)
-        print(y, r)
+
+def shuffle(lst):
+    """
+    Shuffle a list in place using the Fisher-Yates algorithm.
+    Works on MicroPython (which doesn't have random.shuffle).
+
+    Args:
+        lst: The list to shuffle (modified in place)
+    """
+    # Start from the last element and go backwards
+    for i in range(len(lst) - 1, 0, -1):
+        # Pick a random index from 0 to i (inclusive)
+        j = random.randint(0, i)
+
+        # Swap elements at positions i and j
+        lst[i], lst[j] = lst[j], lst[i]
+
+    # No need to return anything since the list is modified in place
+
+###### CHECK - MEAN doesn't return FAST LOG 2!??!??
+
+# WARMUP LOOP:
+
+print("warming up")
+for x in range(1800):
+    time.sleep(1)
+    a = random.randint(1, 254)
+    b = random.randint(1, 254)
+    send_dac_value(4, a)
+    send_dac_value(5, b)
+
+print("warmup done")
+
+for x in range(8):
+    a = random.randint(1,254)
+    b = random.randint(1,254)
+    sampled_notes.append((a, b))  # we will continually sample these to check for freq drift
+
+with open("result.txt", "w") as f:  # file writing in shutdown fun COMMENTED OUT
+    for x in range(40):
+        shuffle(sampled_notes)
+        print(f"cycle {x}")
+        for h in sampled_notes:
+            a, b = h
+            send_dac_value(4, a)
+            send_dac_value(5, b)
+            flush_pio()
+            ema_reset()
+            time.sleep(1)
+            notecode = (a << 8) | b
+            flush_pio()
+            for q in range(3):
+                tnow = int(time.ticks_ms() / 1000.0)
+                flush_pio()
+                samp = get_sample_mean_float(32)
+                f.write(f"{tnow}\t{notecode}\t{samp}\n")
+                f.flush()
+                time.sleep(1)
+
+
 
 send_dac_value(2, 0)
 shut_down()
