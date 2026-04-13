@@ -236,3 +236,5 @@ class DacMessages:
         out = (self.dirty >> (dac * 8)) & 255
         self.dirty &= (~out << (dac * 8))
         return out
+
+DAC_MESSAGES = DacMessages()
