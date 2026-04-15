@@ -1,3 +1,5 @@
+from array import array
+
 VOICE_COUNT = 1
 SM_FREQ = 6_000_000
 MAXX = 2**16-1  # highest number the frequency counter state machines can count down from
@@ -6,3 +8,5 @@ INITIAL_ERROR_TOLERANCE = 1600 # how many wave count deviation before we conside
 # this experimentally determined value is used for the initial tuning, then we refine it once the tuning is done
 MINIMUM_PID_INTERVAL = 3000  # we must wait at least this many microseconds between sending corrections from the PID
 ERROR_EMA_ALPHA = 256  # smoothing of the frequency samples that we collect
+
+

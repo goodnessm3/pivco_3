@@ -23,6 +23,8 @@ from voice2 import Voice
 from controls import Controls
 
 
+
+
 # DAC setup code
 
 for x in range(VOICE_COUNT):
@@ -217,72 +219,74 @@ MR = MidiReader()
 CONTROLS = Controls()
 VOICES = [Voice(0)]
 
-try:
+
+#try:
+while 1:
+    #print(TARGET_WAVETIME_ARRAY)
+    #print("measured address ", MEASURED_ADDRESS)
+    #print("top of main loop")
+    #DAC_MANAGER.update()
+    loopcount += 1
+    #DISPLAY.draw_screen()
+    MR.read()  # induce the MidiReader to compile messages to read out
+
+
+    voice = 0  # todo multi
+
+    #print(MR.note_queue._buffer)
+
     while 1:
-        #print(TARGET_WAVETIME_ARRAY)
-        #print("measured address ", MEASURED_ADDRESS)
-        #print("top of main loop")
-        #DAC_MANAGER.update()
-        loopcount += 1
-        #DISPLAY.draw_screen()
-        MR.read()  # induce the MidiReader to compile messages to read out
+        note_message = MR.note_queue.get()
 
+        if not note_message:
+            break
+        #print(note_message)
+        status = (note_message & 256) >> 8  # 1 = note on, 0 = note off
+        note = note_message & 255
+        #print(status,note)
+        if status:  # todo - voice allocation handling, don't send key down to an already occupied voice!
+            NOTE_QUEUE.put(note | (voice << 8))  # todo multivoice
+            VOICES[voice].key_down()
+        else:
+            VOICES[voice].key_up()
 
-        voice = 0  # todo multi
+    while 1:
+        control_message = MR.control_queue.get()
+        if not control_message:
+            break
+        a = control_message >> 8
+        b = control_message & 255
+        #print(a, b)
+        if a == 23 and b == 254:
+            shut_down()
+        CONTROLS.process_control_signal(control_message)
 
-        #print(MR.note_queue._buffer)
-
-        while 1:
-            note_message = MR.note_queue.get()
-
-            if not note_message:
-                break
-            #print(note_message)
-            status = (note_message & 256) >> 8  # 1 = note on, 0 = note off
-            note = note_message & 255
-            #print(status,note)
-            if status:  # todo - voice allocation handling, don't send key down to an already occupied voice!
-                NOTE_QUEUE.put(note | (voice << 8))  # todo multivoice
-                VOICES[voice].key_down()
-            else:
-                VOICES[voice].key_up()
-
-        while 1:
-            control_message = MR.control_queue.get()
-            if not control_message:
-                break
-            a = control_message >> 8
-            b = control_message & 255
-            #print(a, b)
-            if a == 23 and b == 254:
-                shut_down()
-            CONTROLS.process_control_signal(control_message)
-
-        for v in VOICES:
-            v.update()
+    for v in VOICES:
+        v.update()
 
 
 
-                #CONTROLS.process_control_signal(*msg)
-                #ret = CONTROLS.get_updated()  # todo - careful we aren't discarding things
-                #print(ret)
-                #if not ret:
-                    #continue  # should this be break?
-                #for tup in ret:
-                    #ob, parm, value = tup
-                    #if parm:  # write the named variable of the specified object
-                        # ob.__setattr__(parm, value)  # not this!!
-                        #setattr(ob, parm, value)  # but this!!
-                    #pair = DM.update(tup)  # get a new frame buffer for the LCD
-                    #DISPLAY.update(pair)  # send the new frame buffer for display next loop
+
+            #CONTROLS.process_control_signal(*msg)
+            #ret = CONTROLS.get_updated()  # todo - careful we aren't discarding things
+            #print(ret)
+            #if not ret:
+                #continue  # should this be break?
+            #for tup in ret:
+                #ob, parm, value = tup
+                #if parm:  # write the named variable of the specified object
+                    # ob.__setattr__(parm, value)  # not this!!
+                    #setattr(ob, parm, value)  # but this!!
+                #pair = DM.update(tup)  # get a new frame buffer for the LCD
+                #DISPLAY.update(pair)  # send the new frame buffer for display next loop
 
 
 
 
 
-except Exception as e:
-    print(repr(e))
+#except Exception as e:
+    #print(repr(e))
 
-finally:
-    pass
+#finally:
+ #   pass
     #shut_down()

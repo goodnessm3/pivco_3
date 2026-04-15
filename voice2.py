@@ -2,6 +2,7 @@ from array import array
 from ADSR3 import LinearADSR
 from filtertable import FILTER_CVS
 from mydacs import DAC_MESSAGES
+from omni import VOICE_PARAMS
 
 class GlobalMods:
 
@@ -17,8 +18,6 @@ GLOBALMODS = GlobalMods()
 
 
 class Voice:
-
-
 
     def __init__(self, address, cutoff_freq_tracking=True):
 
@@ -38,9 +37,9 @@ class Voice:
         self.address = address
         self.cutoff_freq_tracking = cutoff_freq_tracking  # TODO: configurable later
         self.adsrs = []
+        self.lfos = []  # todo - this should be a list passed in to the init method referencing global lfos
         self.active_adsrs = 4  # this is a bitmask that tells us which ADSRs to query. Default just to VCA.
         self.active_lfos = 0
-
 
         for x in range(8):
             self.adsrs.append(LinearADSR())
@@ -64,21 +63,37 @@ class Voice:
         addr = self.address
         todo_adsr = self.active_adsrs
         todo_lfo = self.active_lfos
-        #todo_adsr = 255  # todo temporary! need a better way to set global stuff
-        todo_lfo = 0
+        # todo_params = DIRTY_PARAMS  # a static parameter got changed by a slider
+
         chan = 0
-        while todo_adsr or todo_lfo:
-            modulation = GLOBALMODS.get(chan)
-            if chan == 6:
-                print("from in voice class, co =", modulation)
+
+        #print(VOICE_PARAMS)
+        #print(todo_params)
+
+        #while todo_adsr or todo_lfo or todo_params:
+        while chan < 8:
+            if not chan == 4 or chan == 5:  # don't overwrite VCO control voltage
+                modulation = VOICE_PARAMS[chan]
+
             if todo_adsr & 1:
                 val = self.adsrs[chan].get()
                 modulation += val
-                DAC_MESSAGES.set(addr, chan, modulation >> 8)
+
+            if todo_lfo & 1:
+                val = self.lfos[chan].get(self.address)  # LFOs track the caller to do a unique phase offset
+                modulation += val
+
+            if not chan == 4 or chan == 5:  # don't overwrite VCO control voltage
                 # scale down from 16-bit internal calcs to 8-bit DAC resolution
-            # todo: LFO mods
+                DAC_MESSAGES.set(addr, chan, modulation >> 8)
             todo_adsr >>= 1
+            todo_lfo >>= 1
+            #todo_params >>= 1
             chan += 1
+
+            # TODO: make it so VCO CV is applied via the same mechanism
+
+
 
 
 
