@@ -24,7 +24,14 @@ class LinearADSR:
 
         """These numbers specify the gradient of each phase, i.e. how much the bucket in/de-creases over 1 millisecond"""
 
-        val = 65535 // time
+        print(f"set rate called with {time}")
+
+        #val = 65535000 // (time + 1)  # todo: make better, and +1 is to avoid zero division error
+
+        a = time // 5041  # divide range 0..65536 into 0..13
+        q = 1 << (a + 1)  # 2 to the power of that. 2**14 = 16 seconds
+        val = 65536 // q
+
         if rate_index == 2 or rate_index == 4:  # decay and release are negative rates
             val = -1 * val
         self.rates[rate_index] = val
@@ -58,3 +65,8 @@ class LinearADSR:
             self.phase = 0
 
         return self.bucket
+
+
+ADSRS = []
+for x in range(32):
+    ADSRS.append(LinearADSR())  # address these by index, 8 per voice

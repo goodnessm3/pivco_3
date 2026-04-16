@@ -1,6 +1,7 @@
 from voice2 import Voice
 from mydacs import DAC_MESSAGES
 from omni import VOICE_PARAMS
+from ADSR3 import ADSRS
 
 CONTROL_FUNCTIONS = [-1] * 128
 CONTROL_FUNCTIONS[73] = lambda v: set_base_parameter(1, v)
@@ -9,23 +10,41 @@ CONTROL_FUNCTIONS[79] = lambda v: set_base_parameter(7, v)
 CONTROL_FUNCTIONS[72] = lambda v: set_base_parameter(3, v)
 CONTROL_FUNCTIONS[80] = lambda v: set_base_parameter(0, v)
 
+CONTROL_FUNCTIONS[74] = lambda v: set_adr(1, v)  # a
+CONTROL_FUNCTIONS[71] = lambda v: set_adr(2, v)  # d
+CONTROL_FUNCTIONS[77] = lambda v: set_adr(4, v)  # r
+CONTROL_FUNCTIONS[76] = lambda v: set_sustain_level(v)  # r
+
+def set_adr(param, value):
+
+    offset = 0
+    idx = 2  # todo -temporarily we are just configuring the VCA ADSR
+    # this will be read from the state of which parameter we selected from the param select knob
+    for _ in range(4):
+        ADSRS[idx + offset].set_rate(param, value)
+        offset += 8  # need to update 4 ADSRs, one per voice
+
+###########
+# todo - how to handle the correct index for the ADSR??>
+
+
+def set_sustain_level(value):
+
+    idx = 2  # todo -temporarily we are just configuring the VCA ADSR
+    offset = 0
+    for _ in range(4):
+        ADSRS[idx + offset].sustain_level = value
+        offset += 8  # need to update 4 ADSRs, one per voice
+
 def set_base_parameter(dac_channel, value):
 
-    #global DIRTY_PARAMS
-
     VOICE_PARAMS[dac_channel] = value
-    #DIRTY_PARAMS |= 1 << (8 - dac_channel)  # bitmask is right to left, but array is left to right
 
-    print(f"{dac_channel} set to {value}")
-    #print(Voice.dirty_parameters)
-    #print(VOICE_PARAMS)
 
 def set_filter_cutoff(dac_channel, value):
 
-    #global DIRTY_PARAMS
-
     VOICE_PARAMS[dac_channel] = 65535 - value  # filter is backwards: higher voltage = more open
-    #DIRTY_PARAMS |= 1 << (8 - dac_channel)
+
 
 adsr_parameter_mapping = {
     74: "a",
@@ -75,14 +94,7 @@ class Controls:
                 return
 
         # TODO: no lol
-        if channel == 74:  # a
-            return
-        if channel == 71:  # d
-            return
-        if channel == 76:  # s
-            return
-        if channel == 77:  # r
-            return
+
         if channel == 93:  # env depth
             return
         if channel == 81:  # LFO  rate

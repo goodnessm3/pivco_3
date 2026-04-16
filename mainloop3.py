@@ -178,8 +178,8 @@ def shut_down():
 TUNING_ARRAYS = TuningArrays(VOICE_COUNT)
 TUNING_ARRAYS.setup_arrays()
 
-RUNNING = True
-_thread.start_new_thread(fast_loop, ())
+#RUNNING = True
+#_thread.start_new_thread(fast_loop, ())
 
 #
 
@@ -233,8 +233,6 @@ while 1:
 
     voice = 0  # todo multi
 
-    #print(MR.note_queue._buffer)
-
     while 1:
         note_message = MR.note_queue.get()
 
@@ -261,27 +259,41 @@ while 1:
             shut_down()
         CONTROLS.process_control_signal(control_message)
 
+    # process the note queue
+    new_note = NOTE_QUEUE.get()
+    while new_note:  # set up tuning of the new note
+        # print(new_note)
+        midinote = new_note & 255
+        voice = new_note >> 8
+        voltages = TUNING_ARRAYS.get(voice, midinote)
+        coarse = voltages >> 8
+        fine = voltages & 255
+
+        DAC_MESSAGES.set(voice, 4, coarse)
+        DAC_MESSAGES.set(voice, 5, fine)
+
+        new_note = NOTE_QUEUE.get()
+
     for v in VOICES:
         v.update()
 
+    # now that all the modulations are calculated, write out the DAC values
+    for v in (0, 1, 2, 3):  # apparently faster than using a range object
 
+        todo = DAC_MESSAGES.get_dirty(v)  # only update the values that have changed
+        # this is a number where each bit denotes the DAC channel to be updated
 
+        if todo:  # need to send the messages to this DAC, if not to do then we will skip the while loop, send nowt
+            ADDRESS_MANAGER.put(v)
 
-            #CONTROLS.process_control_signal(*msg)
-            #ret = CONTROLS.get_updated()  # todo - careful we aren't discarding things
-            #print(ret)
-            #if not ret:
-                #continue  # should this be break?
-            #for tup in ret:
-                #ob, parm, value = tup
-                #if parm:  # write the named variable of the specified object
-                    # ob.__setattr__(parm, value)  # not this!!
-                    #setattr(ob, parm, value)  # but this!!
-                #pair = DM.update(tup)  # get a new frame buffer for the LCD
-                #DISPLAY.update(pair)  # send the new frame buffer for display next loop
-
-
-
+        chan = 0
+        while todo:
+            if todo & 1:
+                val = DAC_MESSAGES.get(v, chan)
+                # print(f"sending {val} to {chan} on dac {v}")
+                send_dac_value(chan, val)  # puts the message into the state machine FIFO
+            todo >>= 1
+            chan += 1
 
 
 #except Exception as e:

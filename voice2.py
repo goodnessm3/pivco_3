@@ -1,8 +1,9 @@
 from array import array
-from ADSR3 import LinearADSR
+from ADSR3 import ADSRS
 from filtertable import FILTER_CVS
 from mydacs import DAC_MESSAGES
 from omni import VOICE_PARAMS
+
 
 class GlobalMods:
 
@@ -41,8 +42,11 @@ class Voice:
         self.active_adsrs = 4  # this is a bitmask that tells us which ADSRs to query. Default just to VCA.
         self.active_lfos = 0
 
-        for x in range(8):
-            self.adsrs.append(LinearADSR())
+        #for x in range(8):
+            #self.adsrs.append(LinearADSR())
+        self.adsrs = ADSRS[address * 8: address * 8 + 8]  # todo - memoryview?????
+
+        #print(self.adsrs)
 
         self.base_values = array("H", [0] * 8)  # class-level parameters set by hardware sliders. Add our modulations
         # e.g. ADSRs and per-voice LFOs, to these variables
