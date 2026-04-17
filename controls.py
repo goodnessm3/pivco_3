@@ -167,17 +167,6 @@ class Controls:
         print(channel, value)  # for debugging and catching new controls
         return
 
-        # TODO: no lol
-
-        if channel == 93:  # env depth
-            return
-        if channel == 81:  # LFO  rate
-            return
-        if channel == 82:  # LFO depth
-            return
-        if channel == 83:  # LFO shape
-            return
-
 
         if channel == 17:  # param select knob,
             return  # TODO - fill in later
