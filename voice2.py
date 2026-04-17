@@ -1,5 +1,6 @@
 from array import array
 from ADSR3 import ADSRS
+from LFO2 import LFOS
 from filtertable import FILTER_CVS
 from mydacs import DAC_MESSAGES
 from omni import VOICE_PARAMS
@@ -37,14 +38,13 @@ class Voice:
 
         self.address = address
         self.cutoff_freq_tracking = cutoff_freq_tracking  # TODO: configurable later
-        self.adsrs = []
-        self.lfos = []  # todo - this should be a list passed in to the init method referencing global lfos
         self.active_adsrs = 4  # this is a bitmask that tells us which ADSRs to query. Default just to VCA.
         self.active_lfos = 0
 
         #for x in range(8):
             #self.adsrs.append(LinearADSR())
         self.adsrs = ADSRS[address * 8: address * 8 + 8]  # todo - memoryview?????
+        self.lfos = LFOS
 
         #print(self.adsrs)
 

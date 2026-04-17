@@ -20,7 +20,7 @@ from pidcontroller import PidController
 from tuningarrays import TuningArrays
 from readmidi import MidiReader
 from voice2 import Voice
-from controls import Controls
+from controls import Controls, configure_voice_list
 
 
 
@@ -59,9 +59,9 @@ RUNNING = False
 NOTE_QUEUE = CustomFIFO(size=8)  # new notes we want to play. upper 4 bits: voice address, lower 8: MIDI note number
 
 ######### Temporary things for data logging ###########
-TIMES = array("I", [0] * 6096)
-EXPECTEDS = array("I", [0] * 6096)
-FREQS = array("i", [0] * 6096)
+#TIMES = array("I", [0] * 6096)
+#EXPECTEDS = array("I", [0] * 6096)
+#FREQS = array("i", [0] * 6096)
 
 
 ######### Temporary things for data logging ###########
@@ -218,6 +218,8 @@ print("warmup done")
 MR = MidiReader()
 CONTROLS = Controls()
 VOICES = [Voice(0)]
+configure_voice_list(VOICES)  # so that the controls module can alter the properties of the voice objects
+HELD_NOTES = array("B", [0] * 150)  # record which voice is playing which note
 
 
 #try:
@@ -245,8 +247,10 @@ while 1:
         if status:  # todo - voice allocation handling, don't send key down to an already occupied voice!
             NOTE_QUEUE.put(note | (voice << 8))  # todo multivoice
             VOICES[voice].key_down()
+            HELD_NOTES[note] = voice
         else:
-            VOICES[voice].key_up()
+            voice_index = HELD_NOTES[note]
+            VOICES[voice_index].key_up()
 
     while 1:
         control_message = MR.control_queue.get()

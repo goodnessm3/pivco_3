@@ -2,6 +2,7 @@ from voice2 import Voice
 from mydacs import DAC_MESSAGES
 from omni import VOICE_PARAMS
 from ADSR3 import ADSRS
+from LFO2 import LFOS
 VOICES = []  # this will be replaced by a voice list passed from the main module
 from settings import *
 
@@ -51,7 +52,31 @@ def set_adsr_depth(value):
             print(f"Voices will not update {parm} ASDR.")
         offset += 8  # need to update 4 ADSRs, one per voice
 
+def set_lfo_rate(value):
 
+    LFOS[SELECTED_PARAMETER].rate = value
+
+def set_lfo_depth(value):
+
+    LFOS[SELECTED_PARAMETER].depth = value
+
+    parm = PARAMETER_NAMES[SELECTED_PARAMETER]
+
+    for voice in range(VOICE_COUNT):
+        if value > 0:
+            VOICES[voice].active_lfos |= 1 << SELECTED_PARAMETER  # tell the voice that it needs to query
+            print(f"Voices will get updates from {parm} LFO.")
+        else:
+            VOICES[voice].active_lfos &= ~(1 << SELECTED_PARAMETER)  # no need to query this
+            print(f"Voices will not update {parm} LFO.")
+
+def set_lfo_shape(value):
+
+    LFOS[SELECTED_PARAMETER].shape = value
+    shp = LFOS[SELECTED_PARAMETER].shape
+
+    parm = PARAMETER_NAMES[SELECTED_PARAMETER]
+    print(f"LFO for {parm} is {shp}")
 
 
 def set_filter_cutoff(dac_channel, value):
@@ -105,6 +130,10 @@ CONTROL_FUNCTIONS[74] = lambda v: set_adr(1, v)  # a
 CONTROL_FUNCTIONS[71] = lambda v: set_adr(2, v)  # d
 CONTROL_FUNCTIONS[77] = lambda v: set_adr(4, v)  # r
 CONTROL_FUNCTIONS[76] = lambda v: set_sustain_level(v)  # r
+
+CONTROL_FUNCTIONS[81] = set_lfo_rate
+CONTROL_FUNCTIONS[82] = set_lfo_depth
+CONTROL_FUNCTIONS[83] = set_lfo_shape
 
 SELECTED_PARAMETER = 0  # this determines which LFO and ADSR we are modifying
 PARAMETER_NAMES = ["EXT", "SUB", "VCA", "PWM", "COARSE", "FINE", "CUTOFF", "RES"]

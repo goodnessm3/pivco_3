@@ -1,9 +1,9 @@
 def listindex(ls, val):
 
-    """use a value of 0-255 to look up something in a list.
-    Regardless of list length, 255 is divided evenly among its items"""
+    """use a value of 0-65535 to look up something in a list.
+    Regardless of list length, 65535 is divided evenly among its items"""
 
-    index = (len(ls) * val) // 255
+    index = (len(ls) * val) // 65536
     return ls[index]
 
 def fpmult(a, b):

@@ -25,7 +25,7 @@ class LinearADSR:
 
         """These numbers specify the gradient of each phase, i.e. how much the bucket in/de-creases over 1 millisecond"""
 
-        print(f"set rate called with {time}")
+        #print(f"set rate called with {time}")
 
         a = time // 5041  # divide range 0..65536 into 0..13
         q = 1 << (a + 1)  # 2 to the power of that. 2**14 = 16 seconds
