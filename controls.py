@@ -2,35 +2,29 @@ from voice2 import Voice
 from mydacs import DAC_MESSAGES
 from omni import VOICE_PARAMS
 from ADSR3 import ADSRS
+VOICES = []  # this will be replaced by a voice list passed from the main module
+from settings import *
 
-CONTROL_FUNCTIONS = [-1] * 128
-CONTROL_FUNCTIONS[73] = lambda v: set_base_parameter(1, v)
-CONTROL_FUNCTIONS[75] = lambda v: set_filter_cutoff(6, v)
-CONTROL_FUNCTIONS[79] = lambda v: set_base_parameter(7, v)
-CONTROL_FUNCTIONS[72] = lambda v: set_base_parameter(3, v)
-CONTROL_FUNCTIONS[80] = lambda v: set_base_parameter(0, v)
+def configure_voice_list(ls):
 
-CONTROL_FUNCTIONS[74] = lambda v: set_adr(1, v)  # a
-CONTROL_FUNCTIONS[71] = lambda v: set_adr(2, v)  # d
-CONTROL_FUNCTIONS[77] = lambda v: set_adr(4, v)  # r
-CONTROL_FUNCTIONS[76] = lambda v: set_sustain_level(v)  # r
+    global VOICES
+
+    VOICES = ls
+
 
 def set_adr(param, value):
 
     offset = 0
-    idx = 2  # todo -temporarily we are just configuring the VCA ADSR
+    idx = SELECTED_PARAMETER
     # this will be read from the state of which parameter we selected from the param select knob
     for _ in range(4):
         ADSRS[idx + offset].set_rate(param, value)
         offset += 8  # need to update 4 ADSRs, one per voice
 
-###########
-# todo - how to handle the correct index for the ADSR??>
-
 
 def set_sustain_level(value):
 
-    idx = 2  # todo -temporarily we are just configuring the VCA ADSR
+    idx = SELECTED_PARAMETER
     offset = 0
     for _ in range(4):
         ADSRS[idx + offset].sustain_level = value
@@ -40,10 +34,36 @@ def set_base_parameter(dac_channel, value):
 
     VOICE_PARAMS[dac_channel] = value
 
+def set_adsr_depth(value):
+
+    offset = 0
+    idx = SELECTED_PARAMETER
+    parm = PARAMETER_NAMES[SELECTED_PARAMETER]
+    print(f"setting depth of {parm}")
+    # this will be read from the state of which parameter we selected from the param select knob
+    for voice in range(VOICE_COUNT):
+        ADSRS[idx + offset].depth = value  # todo - when 0, skip getting values from this ADSR
+        if value > 0:
+            VOICES[voice].active_adsrs |= 1 << idx  # tell the voice that it needs to query this ADSR in update()
+            print(f"Voices will get updates from {parm} ASDR.")
+        else:
+            VOICES[voice].active_adsrs &= ~(1 << idx)  # no need to query this ADSR
+            print(f"Voices will not update {parm} ASDR.")
+        offset += 8  # need to update 4 ADSRs, one per voice
+
+
+
 
 def set_filter_cutoff(dac_channel, value):
 
     VOICE_PARAMS[dac_channel] = 65535 - value  # filter is backwards: higher voltage = more open
+
+def parameter_select(value):
+
+    global SELECTED_PARAMETER
+
+    SELECTED_PARAMETER = (value // 4096) % 8
+    print(PARAMETER_NAMES[SELECTED_PARAMETER])
 
 
 adsr_parameter_mapping = {
@@ -67,6 +87,28 @@ voice_parameter_mapping = {
 option_lists = {"shape":["SAW", "RAMP", "TRI", "SINE", "SHARK"],
                 "invert": ["ON", "OFF"]
                }
+
+
+CONTROL_FUNCTIONS = [-1] * 128
+
+CONTROL_FUNCTIONS[19] = parameter_select  # doesn't need to be a lambda func because it just takes the knob value
+
+CONTROL_FUNCTIONS[73] = lambda v: set_base_parameter(1, v)
+CONTROL_FUNCTIONS[75] = lambda v: set_filter_cutoff(6, v)
+CONTROL_FUNCTIONS[79] = lambda v: set_base_parameter(7, v)
+CONTROL_FUNCTIONS[72] = lambda v: set_base_parameter(3, v)
+CONTROL_FUNCTIONS[80] = lambda v: set_base_parameter(0, v)
+
+CONTROL_FUNCTIONS[93] = set_adsr_depth
+
+CONTROL_FUNCTIONS[74] = lambda v: set_adr(1, v)  # a
+CONTROL_FUNCTIONS[71] = lambda v: set_adr(2, v)  # d
+CONTROL_FUNCTIONS[77] = lambda v: set_adr(4, v)  # r
+CONTROL_FUNCTIONS[76] = lambda v: set_sustain_level(v)  # r
+
+SELECTED_PARAMETER = 0  # this determines which LFO and ADSR we are modifying
+PARAMETER_NAMES = ["EXT", "SUB", "VCA", "PWM", "COARSE", "FINE", "CUTOFF", "RES"]
+
 
 class Controls:
 
@@ -92,6 +134,9 @@ class Controls:
                 #Voice.parameters[dac_channel] = value  # set the class-level attribute to affect all voices
                 #Voice.dirty_parameters |= 1 << dac_channel
                 return
+
+        print(channel, value)  # for debugging and catching new controls
+        return
 
         # TODO: no lol
 

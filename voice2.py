@@ -51,16 +51,21 @@ class Voice:
         self.base_values = array("H", [0] * 8)  # class-level parameters set by hardware sliders. Add our modulations
         # e.g. ADSRs and per-voice LFOs, to these variables
 
+        self.key_counter = 0  # rather than true or false we need to increment/decrement a counter for "key rollover"
+
 
     def key_down(self):
 
         for x in self.adsrs:
             x.gate(True)
+        self.key_counter += 1
 
     def key_up(self):
 
-        for x in self.adsrs:
-            x.gate(False)
+        self.key_counter -= 1
+        if self.key_counter == 0:  # need this otherwise an old key up event will un-gate a newer note
+            for x in self.adsrs:
+                x.gate(False)
 
     def update(self):
 

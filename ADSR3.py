@@ -7,6 +7,7 @@ class LinearADSR:
 
         self.max_level = 65535
         self.sustain_level = 20000
+        self.depth = 0
 
         self.rates = array("i", [0] * 5)  # how much we should increment/decrement the bucket per millisecond
 
@@ -26,11 +27,9 @@ class LinearADSR:
 
         print(f"set rate called with {time}")
 
-        #val = 65535000 // (time + 1)  # todo: make better, and +1 is to avoid zero division error
-
         a = time // 5041  # divide range 0..65536 into 0..13
         q = 1 << (a + 1)  # 2 to the power of that. 2**14 = 16 seconds
-        val = 65536 // q
+        val = 65536 // q  # todo - probably just have a series of linear regimes, this range feels wonky
 
         if rate_index == 2 or rate_index == 4:  # decay and release are negative rates
             val = -1 * val
@@ -64,7 +63,7 @@ class LinearADSR:
             self.bucket = 0
             self.phase = 0
 
-        return self.bucket
+        return (self.bucket * self.depth) >> 16
 
 
 ADSRS = []

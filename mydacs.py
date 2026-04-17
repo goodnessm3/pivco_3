@@ -220,6 +220,14 @@ class DacMessages:
             self.dirty |= 1 << addr  # only set dirty flag if the value actually changed
             self.messages[addr] = val
 
+    def add(self, dac, channel, val):
+
+        """modify the value in the array, for example applying a modulation."""
+
+        addr = dac * 8 + channel
+        self.dirty |= 1 << addr  # only set dirty flag if the value actually changed
+        self.messages[addr] += val
+
     def get(self, dac, channel):
 
         """Return the most recent value we wanted to write to dac x channel y."""
