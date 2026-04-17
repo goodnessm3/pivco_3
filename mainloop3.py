@@ -12,6 +12,7 @@ from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latc
 # this table actually contains the log2s of the wave counts
 
 from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
+from voice_allocator import VoiceAllocator
 from wavecount_table import NOTE_WAVECOUNTS, NOTES, VoltageArrays
 
 from line_fitter_fixedpoint import FitterFP
@@ -171,9 +172,9 @@ def shut_down():
 
     exit()
 
-#ADDRESS_MANAGER.put(0)
-#prepare_tune_latch()
-#send_dac_value(2, 127)  # dummy to force tune latch
+ADDRESS_MANAGER.put(0)
+prepare_tune_latch()
+send_dac_value(2, 0)  # dummy to force tune latch
 
 TUNING_ARRAYS = TuningArrays(VOICE_COUNT)
 TUNING_ARRAYS.setup_arrays()
@@ -217,9 +218,13 @@ print("warmup done")
 
 MR = MidiReader()
 CONTROLS = Controls()
-VOICES = [Voice(0)]
+VOICES = []
+for x in range(VOICE_COUNT):
+    VOICES.append(Voice(x))
+
 configure_voice_list(VOICES)  # so that the controls module can alter the properties of the voice objects
 HELD_NOTES = array("B", [0] * 150)  # record which voice is playing which note
+VOICE_ALLOCATOR = VoiceAllocator(VOICE_COUNT)
 
 
 #try:
@@ -233,7 +238,7 @@ while 1:
     MR.read()  # induce the MidiReader to compile messages to read out
 
 
-    voice = 0  # todo multi
+    #voice = 0  # todo multi
 
     while 1:
         note_message = MR.note_queue.get()
@@ -244,13 +249,16 @@ while 1:
         status = (note_message & 256) >> 8  # 1 = note on, 0 = note off
         note = note_message & 255
         #print(status,note)
-        if status:  # todo - voice allocation handling, don't send key down to an already occupied voice!
+        if status:
+            voice = VOICE_ALLOCATOR.next()
+            VOICE_ALLOCATOR.key_down(voice)
             NOTE_QUEUE.put(note | (voice << 8))  # todo multivoice
             VOICES[voice].key_down()
             HELD_NOTES[note] = voice
         else:
             voice_index = HELD_NOTES[note]
             VOICES[voice_index].key_up()
+            VOICE_ALLOCATOR.key_up(voice_index)
 
     while 1:
         control_message = MR.control_queue.get()

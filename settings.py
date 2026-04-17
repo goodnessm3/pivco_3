@@ -1,6 +1,6 @@
 from array import array
 
-VOICE_COUNT = 1
+VOICE_COUNT = 2
 SM_FREQ = 6_000_000
 MAXX = 2**16-1  # highest number the frequency counter state machines can count down from
 EMA_ALPHA = 2048  # 0 to 4096, this is for the EMA of the frequency measurement

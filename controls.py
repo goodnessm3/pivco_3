@@ -167,7 +167,7 @@ class Controls:
         print(channel, value)  # for debugging and catching new controls
         return
 
-        
+
 
 
         if channel == 17:  # param select knob,
