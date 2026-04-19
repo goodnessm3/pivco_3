@@ -2,11 +2,13 @@ from array import array
 from pidcontroller import PidController
 from line_fitter_fixedpoint import FitterFP
 from mydacs import send_dac_value, ADDRESS_MANAGER, prepare_tune_latch
-from freq_measure import flush_pio, ema_reset, get_sample_mean, get_sample
+from freq_measure import flush_pio, ema_reset, get_sample_mean
 from fastlog2 import fast_log2
 import time
 from wavecount_table import NOTE_WAVECOUNTS
 from settings import *
+
+
 
 class TuningArrays:
 
@@ -19,7 +21,7 @@ class TuningArrays:
         self.notes_length = 96-33  # use this as the array offset per voice
         self.arr = array("I", [0] * nvoices * self.notes_length)  # one position per voice per note
         # coarse is the upper 8 bits, fine is the lower 8.
-        self.pid = PidController(500, 0, 0)  # used for all voices
+        self.pid = PidController(8192, 0, 0)  # used for all voices
 
     def get(self, voice, midinote):
 
@@ -40,7 +42,17 @@ class TuningArrays:
 
         for x in range(self.nvoices):
             self.setup_array(x)
+            print(f"set up tuning array for voice {x}")
 
+    def optimize_arrays(self, voice=None):
+
+        if not voice:  # default assumption is we are doing all voices
+            for x in range(self.nvoices):
+                for midinote in range(36, 96):
+                    self.optimize(x, midinote)
+                    print(f"Tuned voice {x} note {midinote}")
+        else:
+            pass  # tune just a single voice's array
 
     def setup_array(self, voice):
 
@@ -49,6 +61,10 @@ class TuningArrays:
         for x in range(self.notes_length):
             target_wavecount = fitter.getx(NOTE_WAVECOUNTS[x+33])
             self.arr[start + x] = target_wavecount  # initial rough values to optimize afterwards
+            # misleading name, those are really voltages
+
+        for x in self.arr:
+            print(x >> 8, x & 255)
 
 
     def fit_line(self, voice):
@@ -81,12 +97,14 @@ class TuningArrays:
         prepare_tune_latch()
         self.pid.reset()
 
+        send_dac_value(3, 127)  # PWM half to get good frequency measurement
+
         # initial setup of the process
         tnow = time.ticks_us()
         last_pid_time = time.ticks_us()
         convergence_possible = 0  # a counter for how many samples we got within the error tolerance. Past the threshold,
         # we consider the note tuned and move on.
-        convergence_threshold = 2  # how many good samples before we consider the note stabilized and tuned
+        convergence_threshold = 5  # how many good samples before we consider the note stabilized and tuned
         converged = False  # condition to exit the loop, when we have recorded enough good measurements
         sample_count = 8  # how many samples do we aim to record for this note? More for higher freqs
         # todo - lower cnt for lower freqs, which take longer to record
@@ -121,22 +139,29 @@ class TuningArrays:
 
             sample = None
             while not sample:  # we will ALWAYS wait for a sample
-                sample = get_sample(sample_count)  # returns the fast log2 of the wavecount
+                sample = fast_log2(get_sample_mean(sample_count))
 
-            #print(sample, target_note)
+            print(sample, target_note)
 
             error = sample - target_note
             if error < 0:
                 error = -1 * error  # absolute value is used to stop + and - errors cancelling each other out
 
-            if error < 100:
+            if error < ACCEPTABLE_ERROR:
+                #print("converging...")
                 convergence_possible += 1  # a counter
                 error_ema = ((ERROR_EMA_ALPHA * error) >> 12) + (((4096 - ERROR_EMA_ALPHA) * error_ema) >> 12)
-                if error_ema < 20 and convergence_possible > convergence_threshold:
+                print(error_ema)
+                if error_ema < ACCEPTABLE_EMA and convergence_possible > convergence_threshold:
+                    converged = True  # we have arrived at acceptable coarse, fine values and can bail out
+                    break
+                if error_ema < HIFREQ_EMA and target_note < 63000 and convergence_possible > convergence_threshold:
+                    # more tolerance for hi freqs
                     converged = True  # we have arrived at acceptable coarse, fine values and can bail out
                     break
             else:
                 convergence_possible = 0  # reset to start, need 4 continuous good measurements
+                #print("convergence reset")
 
                 # if we reach this part of the loop, we are still correcting
 
@@ -148,6 +173,9 @@ class TuningArrays:
                 #print(correction)
                 #print("+++")
                 fine += correction
+                #print("sample", sample)
+                #print("tgt", target_note)
+                #print("correxion", correction)
 
                 # if fine has exceeded the range 0 to 255 we need to send a coarse adjustment instead, and then
                 # send the remainder as the fine adjustment
@@ -166,5 +194,8 @@ class TuningArrays:
 
                 send_dac_value(5, fine)
 
-        self.arr[midinote] = (coarse << 8) | fine
+        addr = voice * self.notes_length + midinote - 33
+
+        #self.arr[midinote - 33] = (coarse << 8) | fine
+        self.arr[addr] = (coarse << 8) | fine
         #return (coarse << 8) | fine

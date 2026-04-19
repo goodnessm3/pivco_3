@@ -1,7 +1,6 @@
 from array import array
 from fastlog2 import fast_log2
-
-SM_FREQ = 6_000_000
+from settings import SM_FREQ
 
 # lowest note on keyboard = 36
 # highest note = 96
@@ -9,7 +8,7 @@ SM_FREQ = 6_000_000
 A1 = 55.00
 NOTES = [0.0] * 133  # unused very low notes
 NOTE_WAVECOUNTS = array("I", [0] * 133)
-NOTE_WAVECOUNTS_HISPEED = array("I", [0] * 133)
+
 # going from A1 as it's the lowest integer number
 # 96 is the highest MIDI note on the keyboard
 for x in range(97):
@@ -21,7 +20,7 @@ for x in range(97):
     # so about 54000 for the lowest note, and 180 for the highest - the PIO frequency is chosen so that we use
     # most of the range of a 16-bit counter across the entire range of notes
     # this wavecounts table is used to define the set point of the autotuning PID.
-    NOTE_WAVECOUNTS_HISPEED[x + 33] = fast_log2(int(100_000_000 // freq // 2))
+
 
 
 class VoltageArrays:

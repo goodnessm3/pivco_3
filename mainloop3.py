@@ -1,34 +1,60 @@
 from custom_fifo import CustomFIFO
 from settings import *  # definitions of all constants used in the code
 from pin_assignments import *
-from machine import Pin, I2C
+#from machine import Pin, I2C
 import time
 from sys import exit
 import _thread
 from fastlog2 import fast_log2
 from array import array
-from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latch, DAC_MESSAGES
-#from wavecount_table import NOTE_WAVECOUNTS  # use this to give the tuning PIDs a target
+
+from wavecount_table import NOTE_WAVECOUNTS  # use this to give the tuning PIDs a target
 # this table actually contains the log2s of the wave counts
 
-from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
+from freq_measure import get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio
 from voice_allocator import VoiceAllocator
 from wavecount_table import NOTE_WAVECOUNTS, NOTES, VoltageArrays
 
 from line_fitter_fixedpoint import FitterFP
 from pidcontroller import PidController
 
-from tuningarrays import TuningArrays
+
 from readmidi import MidiReader
 from voice2 import Voice
 from controls import Controls, configure_voice_list
 
-
+from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latch, DAC_MESSAGES
+time.sleep(1)
+from tuningarrays import TuningArrays  # need to import this AFTER mydacs, because it itself imports mydacs
+# todo - stop being such an idiot
 
 
 # DAC setup code
+#prepare_tune_latch()
+#ADDRESS_MANAGER.put(7)  # unused address to force all latches off
+#(2, 0)
+"""
+for x in range(10):
+    ADDRESS_MANAGER.put(1)
+    time.sleep(0.1)
+    dac_setup()  # manages reset pin
+    prepare_tune_latch()
+    send_dac_value(4, 80)
+    send_dac_value(5, 0)
+    time.sleep(0.2)
+    ADDRESS_MANAGER.put(0)
+    time.sleep(0.1)
+    dac_setup()  # manages reset pin
+    prepare_tune_latch()
+    send_dac_value(4, 80)
+    send_dac_value(5, 0)
+    time.sleep(0.2)
+
+time.sleep(20)
+"""
 
 for x in range(VOICE_COUNT):
+    #prepare_tune_latch()
     ADDRESS_MANAGER.put(x)
     time.sleep(0.1)
     dac_setup()  # manages reset pin
@@ -172,12 +198,58 @@ def shut_down():
 
     exit()
 
+"""
 ADDRESS_MANAGER.put(0)
 prepare_tune_latch()
 send_dac_value(2, 0)  # dummy to force tune latch
+"""
+
+# WARMUP LOOP:
+import random
+warmup_seconds = 1
+"""
+ADDRESS_MANAGER.put(0)
+time.sleep(1)
+send_dac_value(2, 0)
+ADDRESS_MANAGER.put(1)
+time.sleep(1)
+send_dac_value(2, 0)
+"""
+"""
+print("warming up")
+for x in range(warmup_seconds):
+    time.sleep(1)
+    ADDRESS_MANAGER.put(0)
+    time.sleep(1)
+    a = random.randint(1, 254)
+    b = random.randint(1, 254)
+    send_dac_value(4, a)
+    send_dac_value(5, b)
+
+    ADDRESS_MANAGER.put(1)
+    time.sleep(1)
+    a = random.randint(1, 254)
+    b = random.randint(1, 254)
+    send_dac_value(4, a)
+    send_dac_value(5, b)
+    time.sleep(1)
+"""
+
+print("warmup done")
+print("doing tuning arrays")
+
+ADDRESS_MANAGER.put(0)
+send_dac_value(3, 127)
+send_dac_value(2, 64)
+ADDRESS_MANAGER.put(1)
+send_dac_value(3, 127)
+send_dac_value(2, 64)
 
 TUNING_ARRAYS = TuningArrays(VOICE_COUNT)
 TUNING_ARRAYS.setup_arrays()
+TUNING_ARRAYS.optimize_arrays()
+
+print("arrays tuned")
 
 #RUNNING = True
 #_thread.start_new_thread(fast_loop, ())
@@ -202,19 +274,7 @@ expected_notes = {}
 
 
 
-# WARMUP LOOP:
-import random
-warmup_seconds = 1
 
-print("warming up")
-for x in range(warmup_seconds):
-    time.sleep(1)
-    a = random.randint(1, 254)
-    b = random.randint(1, 254)
-    send_dac_value(4, a)
-    send_dac_value(5, b)
-
-print("warmup done")
 
 MR = MidiReader()
 CONTROLS = Controls()
@@ -228,6 +288,9 @@ VOICE_ALLOCATOR = VoiceAllocator(VOICE_COUNT)
 
 
 #try:
+
+prepare_tune_latch()
+
 while 1:
     #print(TARGET_WAVETIME_ARRAY)
     #print("measured address ", MEASURED_ADDRESS)
@@ -236,9 +299,6 @@ while 1:
     loopcount += 1
     #DISPLAY.draw_screen()
     MR.read()  # induce the MidiReader to compile messages to read out
-
-
-    #voice = 0  # todo multi
 
     while 1:
         note_message = MR.note_queue.get()
@@ -252,7 +312,7 @@ while 1:
         if status:
             voice = VOICE_ALLOCATOR.next()
             VOICE_ALLOCATOR.key_down(voice)
-            NOTE_QUEUE.put(note | (voice << 8))  # todo multivoice
+            NOTE_QUEUE.put(note | (voice << 8))
             VOICES[voice].key_down()
             HELD_NOTES[note] = voice
         else:
@@ -283,6 +343,8 @@ while 1:
 
         DAC_MESSAGES.set(voice, 4, coarse)
         DAC_MESSAGES.set(voice, 5, fine)
+
+        #print(f"For note {midinote} voice {voice} voltages were {coarse}, {fine}")
 
         new_note = NOTE_QUEUE.get()
 

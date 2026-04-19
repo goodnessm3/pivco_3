@@ -11,7 +11,7 @@ from mydacs import send_dac_value, dac_setup, ADDRESS_MANAGER, prepare_tune_latc
 #from wavecount_table import NOTE_WAVECOUNTS  # use this to give the tuning PIDs a target
 # this table actually contains the log2s of the wave counts
 
-from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
+
 from wavecount_table import NOTE_WAVECOUNTS, NOTES, VoltageArrays
 
 from line_fitter_fixedpoint import FitterFP
@@ -19,10 +19,11 @@ from pidcontroller import PidController
 
 from tuningarrays import TuningArrays
 
-
+from freq_measure import get_sample, get_sample_mean, freq_counter_cleanup, ema_reset, flush_pio, get_sample_mean_float
 
 # DAC setup code
 
+prepare_tune_latch()
 for x in range(VOICE_COUNT):
     ADDRESS_MANAGER.put(x)
     time.sleep(0.1)
@@ -35,17 +36,23 @@ cnt = 0
 loopcount = 0
 loopstart = time.ticks_ms()
 
-"""
+
 ADDRESS_MANAGER.put(0)
 time.sleep(0.1)
-dac_setup()  # manages reset pin
-prepare_tune_latch()
+send_dac_value(2, 127)
+time.sleep(0.1)
+#dac_setup()  # manages reset pin
+#prepare_tune_latch()
 
 ADDRESS_MANAGER.put(1)
 time.sleep(0.1)
-dac_setup()  # manages reset pin
-"""
+send_dac_value(2, 127)
+time.sleep(0.1)
+#dac_setup()  # manages reset pin
+
 ################### END OF SETUP FUNCTIONS #######################
+
+time.sleep(20)
 
 
 

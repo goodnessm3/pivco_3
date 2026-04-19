@@ -16,7 +16,7 @@ def clocker():
     jmp(x_dec, "count")
     label("write")
     # mov(isr, x)        # Capture count
-    in_(x, 16)
+    in_(x, 32)
     # push(noblock)
     mov(x, invert(null))  # Reset Counter immediately
     wait(0, pin, 0)  # Wait for sync low
@@ -57,72 +57,6 @@ DISCARD_COUNTER = 0  # when we reset the EMA, throw away the first 3 samples fro
 MEANS = array("I", [0] * 32)
 MEANS_FILTERED = array("I", [0] * 32)
 
-def get_sample(max_samples=8, alpha=None):
-
-    global EMA
-    global LAST_VALID
-    global DISCARD_COUNTER
-
-    if not alpha:  # TODO - probably not needed any more
-        alpha = EMA_ALPHA
-    else:
-        alpha = alpha
-
-    cnt = 0
-    first = True
-
-    fifosize = sm_clocker.rx_fifo()
-    while fifosize > 0:
-        if fifosize == 8:  # the FIFO filled up completely and we need to discard the first measurement
-            _ = sm_clocker.get()
-        #print("inside fifo getting")
-        d = sm_clocker.get()
-
-        fifosize = sm_clocker.rx_fifo()
-
-        DISCARD_COUNTER += 1
-        if DISCARD_COUNTER < 4:
-            continue  # when we reset the EMA, throw away the first 3 samples from the PIO
-
-        """
-        if first:
-            # have to throw away first measurement, it might be wonky if the sm stalled
-            first = False
-            continue
-        """
-
-        # we were decrementing the counter, so need to subtract from max val to get elapsed clock cycles
-        x = MAXX - (d >> 16)
-        y = MAXX - (d & 0xFFFF)  # splitting 32-bit number into 2 16-bit numbers
-        measurement = x + y  # this func just measures the wave cycle time, we are not interested in hi and lo parts
-
-        if EMA == 0:
-            EMA = measurement  # don't "shock" the EMA with a zero starting value
-        else:
-            delta = measurement - LAST_VALID
-            if delta < 0:
-                delta = -delta
-
-            #print(delta)
-            #print(LAST_VALID)
-
-            if delta < ERROR_TOLERANCE:
-                EMA = ((alpha * measurement) >> 12) + (((4096 - alpha) * EMA) >> 12)
-
-        LAST_VALID = measurement
-
-        cnt += 1
-        if cnt > max_samples:
-            #print(EMA)
-            return fast_log2(EMA)
-    #print("from outer loop", EMA)
-    if cnt > 0:
-        return fast_log2(EMA)
-    ############################
-    #return EXPECTED  # potential for really stupid bugs but we always must return something
-    ############################
-
-
 
 def get_sample_mean(samples=8):
 
@@ -135,19 +69,26 @@ def get_sample_mean(samples=8):
     if samples > 32:
         samples = 32  # max size of the buffer where we store these
     idx = 0
-    smp = None
+    #x = None
+    #y = None
 
     while 1:
-        while not smp:
-            smp = sm_clocker.get()
-        x = MAXX - (smp >> 16)
-        y = MAXX - (smp & 0xFFFF)  # splitting 32-bit number into 2 16-bit numbers
+
+        x = None
+        y = None
+
+        while not x:
+            x = sm_clocker.get()
+        while not y:
+            y = sm_clocker.get()
+        x = MAXX - x
+        y = MAXX - y
+
         measurement = x + y  # this func just measures the wave cycle time, we are not interested in hi and lo parts
         MEANS[idx] = measurement
         idx += 1
         if idx == samples:
             break
-        smp = None
 
     # now we have gathered the requested number of measurements, calculate mean and discard anomalies
     # take the median
@@ -159,6 +100,9 @@ def get_sample_mean(samples=8):
         idx += 1
 
     # now go thru the array again and throw out anomalies
+
+    #print(MEANS)
+
     good_samples = 0
     idx = 1
     while idx < samples:
@@ -173,6 +117,8 @@ def get_sample_mean(samples=8):
             MEANS_FILTERED[good_samples+1] = MEANS[idx]
             good_samples += 2
             idx += 2
+
+    #print(MEANS_FILTERED)
 
     #print(MEANS)
     #print(MEANS_FILTERED)
@@ -214,60 +160,4 @@ def flush_pio():
 
 
 
-def get_sample_mean_float(samples=8):
 
-    global MEANS
-    global MEANS_FILTERED
-
-    for x in range(samples):
-        MEANS_FILTERED[x] = 0  #re-zero array for next time
-
-    if samples > 32:
-        samples = 32  # max size of the buffer where we store these
-    idx = 0
-    smp = None
-
-    while 1:
-        while not smp:
-            smp = sm_clocker.get()
-        x = MAXX - (smp >> 16)
-        y = MAXX - (smp & 0xFFFF)  # splitting 32-bit number into 2 16-bit numbers
-        measurement = x + y  # this func just measures the wave cycle time, we are not interested in hi and lo parts
-        MEANS[idx] = measurement
-        idx += 1
-        if idx == samples:
-            break
-        smp = None
-
-    # now we have gathered the requested number of measurements, calculate mean and discard anomalies
-    # take the median
-    m = 0
-    idx = 1  # don't use zero and wrap the array, because sometimes the end of the array will be unfilled
-    while idx < samples:
-        d = MEANS[idx] - MEANS[idx-1]
-        m += d
-        idx += 1
-
-    # now go thru the array again and throw out anomalies
-    good_samples = 0
-    idx = 1
-    while idx < samples:
-        d = MEANS[idx] - MEANS[idx-1]
-
-        if d > ERROR_TOLERANCE:
-            #print("threw out", MEANS[idx], MEANS[idx-1])
-            idx += 2
-            continue  # delta is too large, don't include this pair of measurements
-        else:
-            MEANS_FILTERED[good_samples] = MEANS[idx-1]
-            MEANS_FILTERED[good_samples+1] = MEANS[idx]
-            good_samples += 2
-            idx += 2
-
-    #print(MEANS)
-    #print(MEANS_FILTERED)
-    #print("m", m)
-    #print(samples)
-    #print("tolerance", tolerance)
-
-    return sum(MEANS_FILTERED) / float(good_samples)
